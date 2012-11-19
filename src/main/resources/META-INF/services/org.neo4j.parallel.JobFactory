@@ -1,1 +1,2 @@
 org.neo4j.parallel.jobs.CountNodes$CountNodesFactory
+org.neo4j.parallel.jobs.CountRelsViaNodes$CountRelsViaNodesFactory
