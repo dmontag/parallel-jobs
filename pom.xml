@@ -8,6 +8,13 @@
     <artifactId>parallel-jobs</artifactId>
     <version>1.0</version>
 
+    <repositories>
+        <repository>
+            <id>Neo4j Snapshots</id>
+            <url>http://m2.neo4j.org/content/repositories/snapshots</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <dependency>
             <groupId>org.neo4j</groupId>
