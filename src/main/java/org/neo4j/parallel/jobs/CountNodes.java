@@ -45,7 +45,7 @@ public class CountNodes implements Job {
                     long localCount = 0;
                     final long limit = (ii + 1) * nodesPerThread;
                     for (long id = ii*nodesPerThread; id < limit; id++) {
-                        NodeRecord record = nodeStore.getRecord(id);
+                        NodeRecord record = nodeStore.forceGetRaw(id);
                         if (record.inUse()) localCount++;
                     }
                     return localCount;
