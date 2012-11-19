@@ -1,16 +1,20 @@
 package org.neo4j.parallel.jobs;
 
 import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.NotFoundException;
-import org.neo4j.kernel.AbstractGraphDatabase;
+import org.neo4j.kernel.InternalAbstractGraphDatabase;
+import org.neo4j.kernel.impl.nioneo.store.NodeRecord;
+import org.neo4j.kernel.impl.nioneo.store.RecordStore;
+import org.neo4j.kernel.impl.nioneo.store.StoreAccess;
 import org.neo4j.parallel.Job;
 import org.neo4j.parallel.JobFactory;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 public class CountNodes implements Job {
 
@@ -30,19 +34,19 @@ public class CountNodes implements Job {
     }
 
     public void process() throws Exception {
-        long totalNumberOfNodes = ((AbstractGraphDatabase) graphDb).getNodeManager().getHighestPossibleIdInUse(Node.class);
+        StoreAccess storeAccess = new StoreAccess((InternalAbstractGraphDatabase) graphDb);
+        final RecordStore<NodeRecord> nodeStore = storeAccess.getNodeStore();
+        long totalNumberOfNodes = nodeStore.getHighId();
         final long nodesPerThread = totalNumberOfNodes / threads;
         for (int i = 0; i < threads; i++) {
             final int ii = i;
             futures.add(executorService.submit(new Callable<Long>() {
                 public Long call() throws Exception {
                     long localCount = 0;
-                    for (long id = ii*nodesPerThread; id < (ii+1)*nodesPerThread; id++) {
-                        try {
-                            graphDb.getNodeById(id);
-                            localCount++;
-                        } catch (NotFoundException e) {
-                        }
+                    final long limit = (ii + 1) * nodesPerThread;
+                    for (long id = ii*nodesPerThread; id < limit; id++) {
+                        NodeRecord record = nodeStore.getRecord(id);
+                        if (record.inUse()) localCount++;
                     }
                     return localCount;
                 }
