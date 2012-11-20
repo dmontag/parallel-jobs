@@ -12,10 +12,10 @@ import org.neo4j.parallel.JobFactory;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class CountRelsViaNodes implements Job {
 
@@ -24,8 +24,8 @@ public class CountRelsViaNodes implements Job {
     private ExecutorService executorService;
     private final int threads;
     private int chunks;
-    private volatile long actualTotal;
-    private final List<Future<Long>> futures = new ArrayList<Future<Long>>();
+    private AtomicLong actualTotal = new AtomicLong(0);
+    private final List<Future<?>> futures = new ArrayList<Future<?>>();
 
     public CountRelsViaNodes(GraphDatabaseService graphDb, PrintStream out, int threads, int chunks) {
         this.graphDb = graphDb;
@@ -33,7 +33,6 @@ public class CountRelsViaNodes implements Job {
         this.threads = threads;
         this.chunks = chunks;
         executorService = new ScheduledThreadPoolExecutor(this.threads);
-        actualTotal = 0;
     }
 
     public void process() throws Exception {
@@ -44,8 +43,8 @@ public class CountRelsViaNodes implements Job {
         final long nodesPerChunk = totalNumberOfNodes / chunks;
         for (int i = 0; i < chunks; i++) {
             final int ii = i;
-            futures.add(executorService.submit(new Callable<Long>() {
-                public Long call() throws Exception {
+            futures.add(executorService.submit(new Runnable() {
+                public void run() {
                     long localCount = 0;
                     final long limit = (ii + 1) * nodesPerChunk;
                     for (long id = ii*nodesPerChunk; id < limit; id++) {
@@ -63,25 +62,25 @@ public class CountRelsViaNodes implements Job {
                             }
                         }
                     }
-                    return localCount;
+                    actualTotal.addAndGet(localCount);
                 }
             }));
         }
-        for (Future<Long> future : futures) {
-            actualTotal += future.get();
+        for (Future<?> future : futures) {
+            future.get();
         }
         executorService.shutdown();
     }
 
     public void reportProgress() {
-        int numberOfRunningThreads = 0;
-        for (Future<Long> future : futures) {
-            if (!future.isDone()) numberOfRunningThreads++;
+        int chunksLeft = 0;
+        for (Future<?> future : futures) {
+            if (!future.isDone()) chunksLeft++;
         }
         out.println(String.format(
                 "Total threads: %d\n" +
-                "Running threads: %d\n" +
-                "Tally so far: %d", threads, numberOfRunningThreads, actualTotal));
+                "Chunks left: %d\n" +
+                "Tally so far: %d", threads, chunksLeft, actualTotal.get()));
     }
 
     public void abort() {
