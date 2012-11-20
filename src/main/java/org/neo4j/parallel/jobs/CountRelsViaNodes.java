@@ -23,13 +23,15 @@ public class CountRelsViaNodes implements Job {
     private PrintStream out;
     private ExecutorService executorService;
     private final int threads;
+    private int chunks;
     private volatile long actualTotal;
     private final List<Future<Long>> futures = new ArrayList<Future<Long>>();
 
-    public CountRelsViaNodes(GraphDatabaseService graphDb, PrintStream out, int threads) {
+    public CountRelsViaNodes(GraphDatabaseService graphDb, PrintStream out, int threads, int chunks) {
         this.graphDb = graphDb;
         this.out = out;
         this.threads = threads;
+        this.chunks = chunks;
         executorService = new ScheduledThreadPoolExecutor(this.threads);
         actualTotal = 0;
     }
@@ -39,14 +41,14 @@ public class CountRelsViaNodes implements Job {
         final RecordStore<NodeRecord> nodeStore = storeAccess.getNodeStore();
         final RecordStore<RelationshipRecord> relStore = storeAccess.getRelationshipStore();
         long totalNumberOfNodes = nodeStore.getHighId();
-        final long nodesPerThread = totalNumberOfNodes / threads;
-        for (int i = 0; i < threads; i++) {
+        final long nodesPerChunk = totalNumberOfNodes / chunks;
+        for (int i = 0; i < chunks; i++) {
             final int ii = i;
             futures.add(executorService.submit(new Callable<Long>() {
                 public Long call() throws Exception {
                     long localCount = 0;
-                    final long limit = (ii + 1) * nodesPerThread;
-                    for (long id = ii*nodesPerThread; id < limit; id++) {
+                    final long limit = (ii + 1) * nodesPerChunk;
+                    for (long id = ii*nodesPerChunk; id < limit; id++) {
                         NodeRecord record = nodeStore.forceGetRaw(id);
                         if (record.inUse()) {
                             long nextRel = record.getNextRel();
@@ -89,7 +91,7 @@ public class CountRelsViaNodes implements Job {
     public static class CountRelsViaNodesFactory implements JobFactory {
 
         public Job getProcessor(GraphDatabaseService graphDb, List<String> args, PrintStream out) {
-            return new CountRelsViaNodes(graphDb, out, Integer.parseInt(args.get(0)));
+            return new CountRelsViaNodes(graphDb, out, Integer.parseInt(args.get(0)), Integer.parseInt(args.get(1)));
         }
 
         public String name() {
@@ -97,7 +99,7 @@ public class CountRelsViaNodes implements Job {
         }
 
         public String argsHelp() {
-            return "<threads>";
+            return "<threads> <chunks>";
         }
     }
 }
